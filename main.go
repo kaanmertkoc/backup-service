@@ -195,48 +195,53 @@ func cleanupOldBackups(client *s3.Client, cfg *Config) error {
 }
 
 func scheduleBackup(cfg *Config, s3Client *s3.Client) error {
-	c := cron.New(cron.WithLocation(time.Local))
+    c := cron.New(cron.WithLocation(time.Local))
 
-	// Schedule backup for 2 AM every day
-	_, err := c.AddFunc("0 2 * * *", func() {
-		log.Printf("Starting scheduled backup at %v", time.Now().Format("2006-01-02 15:04:05"))
-		
-		timestamp := time.Now().Format("20060102_150405")
-		backupFile := filepath.Join(cfg.BackupDir, fmt.Sprintf("sqlite_backup_%s.sql", timestamp))
-		compressedFile := backupFile + ".gz"
+    // Schedule backup for 2 AM every day
+    _, err := c.AddFunc("0 2 * * *", func() {
+        log.Printf("Starting scheduled backup at %v", time.Now().Format("2006-01-02 15:04:05"))
+        
+        // Extract database name from HOST_DB_PATH
+        dbName := filepath.Base(cfg.HostDBPath)
+        // Remove the extension if present
+        dbName = strings.TrimSuffix(dbName, filepath.Ext(dbName))
+        
+        timestamp := time.Now().Format("20060102_150405")
+        backupFile := filepath.Join(cfg.BackupDir, fmt.Sprintf("%s_backup_%s.sql", dbName, timestamp))
+        compressedFile := backupFile + ".gz"
 
-		if err := createBackup(cfg.DBPath, backupFile); err != nil {
-			log.Printf("Backup failed: %v", err)
-			return
-		}
+        if err := createBackup(cfg.DBPath, backupFile); err != nil {
+            log.Printf("Backup failed: %v", err)
+            return
+        }
 
-		if err := compressFile(backupFile, compressedFile); err != nil {
-			log.Printf("Compression failed: %v", err)
-			return
-		}
+        if err := compressFile(backupFile, compressedFile); err != nil {
+            log.Printf("Compression failed: %v", err)
+            return
+        }
 
-		if err := uploadToR2(s3Client, cfg, compressedFile); err != nil {
-			log.Printf("Upload failed: %v", err)
-			return
-		}
+        if err := uploadToR2(s3Client, cfg, compressedFile); err != nil {
+            log.Printf("Upload failed: %v", err)
+            return
+        }
 
-		if err := cleanupOldBackups(s3Client, cfg); err != nil {
-			log.Printf("Cleanup warning: %v", err)
-		}
+        if err := cleanupOldBackups(s3Client, cfg); err != nil {
+            log.Printf("Cleanup warning: %v", err)
+        }
 
-		// Clean up local files
-		os.Remove(backupFile)
-		os.Remove(compressedFile)
+        // Clean up local files
+        os.Remove(backupFile)
+        os.Remove(compressedFile)
 
-		log.Println("Scheduled backup completed successfully")
-	})
+        log.Println("Scheduled backup completed successfully")
+    })
 
-	if err != nil {
-		return fmt.Errorf("failed to schedule backup: %w", err)
-	}
+    if err != nil {
+        return fmt.Errorf("failed to schedule backup: %w", err)
+    }
 
-	c.Start()
-	return nil
+    c.Start()
+    return nil
 }
 
 // New helper function to run a backup
