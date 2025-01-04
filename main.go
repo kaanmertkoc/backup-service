@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -23,6 +24,7 @@ type Config struct {
 	R2AccountID       string
 	R2Bucket          string
 	DBPath            string
+	HostDBPath        string
 	BackupDir         string
 	RetentionDays     int
 }
@@ -34,6 +36,7 @@ func loadConfig() (*Config, error) {
 		R2AccountID:       os.Getenv("R2_ACCOUNT_ID"),
 		R2Bucket:          os.Getenv("R2_BUCKET"),
 		DBPath:            os.Getenv("DB_PATH"),
+		HostDBPath:        os.Getenv("HOST_DB_PATH"),
 		BackupDir:         os.Getenv("BACKUP_DIR"),
 		RetentionDays:     30, // default value
 	}
@@ -56,6 +59,7 @@ func loadConfig() (*Config, error) {
 		"R2_ACCOUNT_ID":        cfg.R2AccountID,
 		"R2_BUCKET":            cfg.R2Bucket,
 		"DB_PATH":              cfg.DBPath,
+		"HOST_DB_PATH":         cfg.HostDBPath,
 	}
 
 	for name, value := range required {
@@ -237,9 +241,14 @@ func scheduleBackup(cfg *Config, s3Client *s3.Client) error {
 
 // New helper function to run a backup
 func runBackup(cfg *Config, s3Client *s3.Client) {
-	timestamp := time.Now().Format("20060102_150405")
-	backupFile := filepath.Join(cfg.BackupDir, fmt.Sprintf("sqlite_backup_%s.sql", timestamp))
-	compressedFile := backupFile + ".gz"
+	 // Extract database name from HOST_DB_PATH
+	 dbName := filepath.Base(cfg.HostDBPath)
+	 // Remove the extension if present
+	 dbName = strings.TrimSuffix(dbName, filepath.Ext(dbName))
+
+	 timestamp := time.Now().Format("20060102_150405")
+	 backupFile := filepath.Join(cfg.BackupDir, fmt.Sprintf("%s_backup_%s.sql", dbName, timestamp))
+	 compressedFile := backupFile + ".gz"
 
 	if err := createBackup(cfg.DBPath, backupFile); err != nil {
 		log.Printf("Backup failed: %v", err)
