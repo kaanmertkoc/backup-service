@@ -295,8 +295,8 @@ func main() {
 	}
 
 	// Run an immediate backup when the service starts
-	log.Println("Running initial backup...")
-	runBackup(cfg, s3Client)
+	// log.Println("Running initial backup...")
+	// runBackup(cfg, s3Client)
 
 	// Schedule daily backups
 	if err := scheduleBackup(cfg, s3Client); err != nil {
